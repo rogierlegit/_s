@@ -1,8 +1,9 @@
-module.exports = ({ env }) => ({
-	plugins: [
-		require('autoprefixer'),
-		// require('postcss-preset-env')({
-		// 	browsers: 'last 5 versions',
-		// }),
-	],
-});
+module.exports = {
+  plugins: [
+    require('autoprefixer')({
+      overrideBrowserslist: [
+        'last 10 versions', // Last 5 versions of each browser
+      ]
+    })
+  ]
+};

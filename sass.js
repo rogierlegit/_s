@@ -1,7 +1,8 @@
 var sass = require('sass');
 var fs = require('fs');
 var pkg = require('./package.json');
-
+const postcss = require('postcss');
+const autoprefixer = require('autoprefixer');
 
 // Configs
 var configs = {
@@ -12,67 +13,68 @@ var configs = {
 	indentType: 'tab',
 	indentWidth: 1,
 	minify: true,
-	sourceMap: false
+	sourceMap: true
 };
 
 // Banner
 var banner = `/*! ${configs.name ? configs.name : pkg.name} v${pkg.version} | (c) ${new Date().getFullYear()} ${pkg.author.name} | ${pkg.license} License | ${pkg.repository.url} */`;
 
 var getOptions = function (file, filename, minify) {
-	return {
-		file: `${configs.pathIn}/${file}`,
-		outFile: `${configs.pathOut}/${filename}`,
-		sourceMap: configs.sourceMap,
-        	sourceMapContents: configs.sourceMap,
-		indentType: configs.indentType,
-		indentWidth: configs.indentWidth,
-		outputStyle: minify ? 'compressed' : 'expanded'
-	};
+    return {
+        file: `${configs.pathIn}/${file}`,
+        outFile: `${configs.pathOut}/${filename}`, // must match written file
+        sourceMap: configs.sourceMap ? `${configs.pathOut}/${filename}.map` : false,
+        sourceMapContents: true, // ensures SCSS is embedded for better mapping
+        sourceMapIncludeSources: true, // adds original sources inline
+        indentType: configs.indentType,
+        indentWidth: configs.indentWidth,
+        outputStyle: minify ? 'compressed' : 'expanded'
+    };
 };
 
 var writeFile = function (pathOut, fileName, fileData, printBanner = true) {
-    // Create the directory path
     fs.mkdir(pathOut, { recursive: true }, function (err) {
-        // If there's an error, throw it
         if (err) throw err;
 
-        // Write the file to the path
-        fs.writeFile(`${pathOut}/${fileName}`, fileData, function (err) {
+        let output = printBanner ? banner + '\n' + fileData : fileData;
+
+        fs.writeFile(`${pathOut}/${fileName}`, output, function (err) {
             if (err) throw err;
-
-            var data = fs.readFileSync(`${pathOut}/${fileName}`);
-            var fd = fs.openSync(`${pathOut}/${fileName}`, 'w+');
-            var insert = printBanner ? new Buffer.from(banner + '\n') : '';
-            fs.writeSync(fd, insert, 0, insert.length, 0);
-            fs.writeSync(fd, data, 0, data.length, insert.length);
-            fs.close(fd, function (err) {
-                if (err) throw err;
-                console.log(`Compiled ${pathOut}/${fileName}`);
-            })
-        })
-    })
-}
-
-var parseSass = function (file, minify) {
-    var filename = `${file.slice(0, file.length - 5)}${minify ? '.min' : ''}.css`;
-    sass.render(getOptions(file, filename, minify), function (err, result) {
-
-	// If there's an error, throw it
-	if (err) throw err;
-
-        // Write the file
-        writeFile(configs.pathOut, filename, result.css);
-
-        if (configs.sourceMap && !configs.sourceMapEmbed) {
-            // Write external sourcemap
-            writeFile(configs.pathOut, filename + '.map', result.map, false);
-        }
+            console.log(`Compiled ${pathOut}/${fileName}`);
+        });
     });
 };
 
-configs.files.forEach(function (file) {
-    parseSass(file);
-    if (configs.minify) {
-	    parseSass(file, true);
+/**
+ * Compile Sass -> PostCSS (Autoprefixer) -> Write CSS + Map
+ */
+function parseSass(file, minify = false) {
+  const filename = `${file.replace(/\.scss$/, '')}${minify ? '.min' : ''}.css`;
+
+  sass.render(getOptions(file, filename, minify), async (err, result) => {
+    if (err) throw err;
+
+    try {
+      // Run PostCSS with Autoprefixer
+      const postcssResult = await postcss([autoprefixer]).process(result.css, {
+        from: undefined,
+        map: result.map ? { prev: result.map.toString(), inline: false } : false
+      });
+
+      // Write CSS file
+      writeFile(configs.pathOut, filename, postcssResult.css);
+
+      // Write sourcemap
+      if (configs.sourceMap && postcssResult.map) {
+        writeFile(configs.pathOut, `${filename}.map`, postcssResult.map.toString(), false);
+      }
+    } catch (e) {
+      console.error('PostCSS error:', e);
     }
+  });
+}
+
+configs.files.forEach(file => {
+  parseSass(file, false); // normal build
+  if (configs.minify) parseSass(file, true); // minified build
 });
