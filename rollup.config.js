@@ -7,7 +7,7 @@ import pkg from './package.json';
 var configs = {
 	name: '_s',
 	files: ['main.js', 'navigation.js', 'customizer.js'],
-	formats: ['iife', 'es', 'amd', 'cjs'],
+	formats: ['iife'],
 	default: 'iife',
 	pathIn: 'src/js',
 	pathOut: 'dist/js',
@@ -21,7 +21,7 @@ var banner = `/*! ${configs.name ? configs.name : pkg.name} v${pkg.version} | (c
 var createOutput = function (filename, minify) {
 	return configs.formats.map(function (format) {
 		var output = {
-			file: `${configs.pathOut}/${filename}${format === configs.default ? '' : `.${format}`}${minify ? '.min' : ''}.js`,
+			file: `${configs.pathOut}/${filename}${minify ? '.min' : ''}.js`,
 			format: format,
 			banner: banner
 		};
